@@ -15,13 +15,13 @@ type taskHookCoordinator struct {
 	// constant for quickly starting all prestart tasks
 	closedCh chan struct{}
 
-	// when the cancel method is called, it cancels the task context, which closes the corresponding channel,
-	// which is being watched in in the task runner (in the Run() method before MAIN: in the file task_runner.go)
-	// which then unblocks that switch statement and allows the Run() code for that task to progress
+	// Each context is used to gate task runners launching the tasks. A task
+	// runner waits until the context associated its lifecycle context is
+	// done/cancelled.
 	mainTaskCtx           context.Context
-	mainTaskCtxCancel     func()
+	mainTaskCtxCancel     context.CancelFunc
 	poststopTaskCtx       context.Context
-	poststopTaskCtxCancel func()
+	poststopTaskCtxCancel context.CancelFunc
 
 	prestartSidecarTasks   map[string]struct{}
 	prestartEphemeralTasks map[string]struct{}
@@ -92,18 +92,18 @@ func (c *taskHookCoordinator) hasMainTasks() bool {
 }
 
 func (c *taskHookCoordinator) startConditionForTask(task *structs.Task) <-chan struct{} {
-	if task.Lifecycle != nil {
-		switch task.Lifecycle.Hook {
-		case structs.TaskLifecycleHookPrestart:
-			// Prestart tasks start without checking status of other tasks
-			return c.closedCh
-		case structs.TaskLifecycleHookPoststop:
-			return c.poststopTaskCtx.Done()
-		}
+	if task.Lifecycle == nil {
+		return c.mainTaskCtx.Done()
 	}
-
-	return c.mainTaskCtx.Done()
-
+	switch task.Lifecycle.Hook {
+	case structs.TaskLifecycleHookPrestart:
+		// Prestart tasks start without checking status of other tasks
+		return c.closedCh
+	case structs.TaskLifecycleHookPoststop:
+		return c.poststopTaskCtx.Done()
+	default:
+		return c.mainTaskCtx.Done()
+	}
 }
 
 // This is not thread safe! This must only be called from one thread per alloc runner.
