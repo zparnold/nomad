@@ -37,16 +37,16 @@ func newTaskHookCoordinator(logger hclog.Logger, tasks []*structs.Task) *taskHoo
 	poststopTaskCtx, poststopTaskCancelFn := context.WithCancel(context.Background())
 
 	c := &taskHookCoordinator{
-		logger:                logger,
-		closedCh:              closedCh,
-		mainTaskCtx:           mainTaskCtx,
-		mainTaskCtxCancel:     mainTaskCancelFn,
-		poststopTaskCtx:       poststopTaskCtx,
-		poststopTaskCtxCancel: poststopTaskCancelFn,
-		prestartSidecarTasks:       map[string]struct{}{},
-		prestartEphemeralTasks:     map[string]struct{}{},
-		mainTasks:                  map[string]struct{}{},
-		poststopTasks:              map[string]struct{}{},
+		logger:                 logger,
+		closedCh:               closedCh,
+		mainTaskCtx:            mainTaskCtx,
+		mainTaskCtxCancel:      mainTaskCancelFn,
+		poststopTaskCtx:        poststopTaskCtx,
+		poststopTaskCtxCancel:  poststopTaskCancelFn,
+		prestartSidecarTasks:   map[string]struct{}{},
+		prestartEphemeralTasks: map[string]struct{}{},
+		mainTasks:              map[string]struct{}{},
+		poststopTasks:          map[string]struct{}{},
 	}
 	c.setTasks(tasks)
 	return c
