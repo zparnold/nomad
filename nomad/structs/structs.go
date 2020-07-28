@@ -4224,14 +4224,38 @@ func (j *Job) ConnectTasks() map[string][]string {
 	m := make(map[string][]string)
 	for _, tg := range j.TaskGroups {
 		for _, task := range tg.Tasks {
-			if task.Kind.IsConnectProxy() {
-				// todo(shoenig): when we support native, probably need to check
-				//  an additional TBD TaskKind as well.
+			if task.Kind.IsConnectProxy() ||
+				task.Kind.IsConnectNative() ||
+				task.Kind.IsAnyConnectGateway() {
 				m[tg.Name] = append(m[tg.Name], task.Name)
 			}
 		}
 	}
 	return m
+}
+
+// ConfigEntries accumulates the Consul Configuration Entries defined in task groups
+// of j.
+//
+// Currently Nomad only supports entries for connect ingress gateways.
+func (j *Job) ConfigEntries() map[string]*ConsulIngressConfigEntry {
+	fmt.Println("ConifgEntries begin")
+	igEntries := make(map[string]*ConsulIngressConfigEntry)
+	for _, tg := range j.TaskGroups {
+		fmt.Println("  tg:", tg.Name)
+		for _, service := range tg.Services {
+			fmt.Println("    service:", service.Name, "isGateway:", service.Connect.IsGateway())
+			if service.Connect.IsGateway() {
+				fmt.Println("    ig:", service.Connect.Gateway.Ingress)
+				if ig := service.Connect.Gateway.Ingress; ig != nil {
+					igEntries[service.Name] = ig
+				}
+				// imagine also accumulating other entry types in the future
+			}
+		}
+	}
+	fmt.Println("ConfigEntries exit:", igEntries)
+	return igEntries
 }
 
 // RequiredSignals returns a mapping of task groups to tasks to their required
@@ -5644,7 +5668,8 @@ func (tg *TaskGroup) Validate(j *Job) error {
 	if tg.Count < 0 {
 		mErr.Errors = append(mErr.Errors, errors.New("Task group count can't be negative"))
 	}
-	if len(tg.Tasks) == 0 {
+	if len(tg.Tasks) == 0 && !tg.UsesConnectGateway() {
+		// defining a connect gateway is an implicit task
 		mErr.Errors = append(mErr.Errors, errors.New("Missing tasks for task group"))
 	}
 	for idx, constr := range tg.Constraints {
@@ -5997,10 +6022,26 @@ func (tg *TaskGroup) LookupTask(name string) *Task {
 	return nil
 }
 
+// UsesConnect for convenience returns true if the TaskGroup contains at least
+// one service that makes use of Consul Connect features.
 func (tg *TaskGroup) UsesConnect() bool {
 	for _, service := range tg.Services {
 		if service.Connect != nil {
 			if service.Connect.IsNative() || service.Connect.HasSidecar() {
+				// todo(shoenig) probably also gateway - check uses.
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// UsesConnectGateway for convenience returns true if the TaskGroup contains at
+// least one service that makes use of Consul Connect Gateway features.
+func (tg *TaskGroup) UsesConnectGateway() bool {
+	for _, service := range tg.Services {
+		if service.Connect != nil {
+			if service.Connect.IsGateway() {
 				return true
 			}
 		}
@@ -6201,9 +6242,9 @@ type Task struct {
 // UsesConnect is for conveniently detecting if the Task is able to make use
 // of Consul Connect features. This will be indicated in the TaskKind of the
 // Task, which exports known types of Tasks. UsesConnect will be true if the
-// task is a connect proxy, or if the task is connect native.
+// task is a connect proxy, connect native, or is a connect gateway.
 func (t *Task) UsesConnect() bool {
-	return t.Kind.IsConnectProxy() || t.Kind.IsConnectNative()
+	return t.Kind.IsConnectProxy() || t.Kind.IsConnectNative() || t.Kind.IsAnyConnectGateway()
 }
 
 func (t *Task) Copy() *Task {
@@ -6639,13 +6680,31 @@ func (k TaskKind) Value() string {
 	return ""
 }
 
-// IsConnectProxy returns true if the TaskKind is connect-proxy
-func (k TaskKind) IsConnectProxy() bool {
-	return strings.HasPrefix(string(k), ConnectProxyPrefix+":") && len(k) > len(ConnectProxyPrefix)+1
+func (k TaskKind) hasPrefix(prefix string) bool {
+	return strings.HasPrefix(string(k), prefix+":") && len(k) > len(prefix)+1
 }
 
+// IsConnectProxy returns true if the TaskKind is connect-proxy.
+func (k TaskKind) IsConnectProxy() bool {
+	return k.hasPrefix(ConnectProxyPrefix)
+}
+
+// IsConnectNative returns true if the TaskKind is connect-native.
 func (k TaskKind) IsConnectNative() bool {
-	return strings.HasPrefix(string(k), ConnectNativePrefix+":") && len(k) > len(ConnectNativePrefix)+1
+	return k.hasPrefix(ConnectNativePrefix)
+}
+
+func (k TaskKind) IsConnectIngress() bool {
+	return k.hasPrefix(ConnectIngressPrefix)
+}
+
+func (k TaskKind) IsAnyConnectGateway() bool {
+	switch {
+	case k.IsConnectIngress():
+		return true
+	default:
+		return false
+	}
 }
 
 const (
@@ -6656,6 +6715,22 @@ const (
 	// ConnectNativePrefix is the prefix used for fields referencing a Connect
 	// Native Task
 	ConnectNativePrefix = "connect-native"
+
+	// ConnectIngressPrefix is the prefix used for fields referencing a Consul
+	// Connect Ingress Gateway Proxy.
+	ConnectIngressPrefix = "connect-ingress"
+
+	// ConnectTerminatingPrefix is the prefix used for fields referencing a Consul
+	// Connect Terminating Gateway Proxy.
+	//
+	// Not yet supported.
+	// ConnectTerminatingPrefix = "connect-terminating"
+
+	// ConnectMeshPrefix is the prefix used for fields referencing a Consul Connect
+	// Mesh Gateway Proxy.
+	//
+	// Not yet supported.
+	// ConnectMeshPrefix = "connect-mesh"
 )
 
 // ValidateConnectProxyService checks that the service that is being

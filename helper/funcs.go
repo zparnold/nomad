@@ -287,6 +287,19 @@ func CopyMapStringStruct(m map[string]struct{}) map[string]struct{} {
 	return c
 }
 
+func CopyMapStringInterface(m map[string]interface{}) map[string]interface{} {
+	l := len(m)
+	if l == 0 {
+		return nil
+	}
+
+	c := make(map[string]interface{}, l)
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
+}
+
 func CopyMapStringInt(m map[string]int) map[string]int {
 	l := len(m)
 	if l == 0 {

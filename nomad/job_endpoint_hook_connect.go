@@ -167,6 +167,7 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 
 			// create a port for the sidecar task's proxy port
 			makePort(fmt.Sprintf("%s-%s", structs.ConnectProxyPrefix, service.Name))
+
 		} else if service.Connect.IsNative() {
 			// find the task backing this connect native service and set the kind
 			nativeTaskName := service.TaskName
@@ -176,6 +177,14 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 				t.Kind = structs.NewTaskKind(structs.ConnectNativePrefix, service.Name)
 				service.TaskName = t.Name // in case the task was inferred
 			}
+
+		} else if service.Connect.IsGateway() {
+			// use the default envoy image, but there is no support for a custom task
+			task := newConnectTask(service.Name)
+			task.Lifecycle = nil                                                        // just a normal task (todo cleanup)
+			task.Kind = structs.NewTaskKind(structs.ConnectIngressPrefix, service.Name) // (todo cleanup)
+			g.Tasks = append(g.Tasks, task)
+			task.Canonicalize(job, g)
 		}
 	}
 
