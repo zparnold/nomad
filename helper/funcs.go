@@ -93,9 +93,17 @@ func StringToPtr(str string) *string {
 	return &str
 }
 
-// TimeToPtr returns the pointer to a time stamp
+// TimeToPtr returns the pointer to a time.Duration.
 func TimeToPtr(t time.Duration) *time.Duration {
 	return &t
+}
+
+// CompareTimePtrs return true if a is the same as b.
+func CompareTimePtrs(a, b *time.Duration) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // Float64ToPtr returns the pointer to an float64

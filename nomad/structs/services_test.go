@@ -474,3 +474,184 @@ func TestConsulSidecarService_Copy(t *testing.T) {
 		}, result)
 	})
 }
+
+var (
+	consulIngressGateway1 = &ConsulGateway{
+		Proxy: &ConsulGatewayProxy{
+			ConnectTimeout:                  helper.TimeToPtr(1 * time.Second),
+			EnvoyGatewayBindTaggedAddresses: true,
+			EnvoyGatewayBindAddresses: map[string]*ConsulGatewayBindAddress{
+				"listener1": &ConsulGatewayBindAddress{Address: "10.0.0.1", Port: 2001},
+				"listener2": &ConsulGatewayBindAddress{Address: "10.0.0.1", Port: 2002},
+			},
+			EnvoyGatewayNoDefaultBind: true,
+			EnvoyDNSDiscoveryType:     "STRICT_DNS",
+			Config: map[string]interface{}{
+				"foo": 1,
+			},
+		},
+		Ingress: &ConsulIngressConfigEntry{
+			TLS: &ConsulGatewayTLSConfig{
+				Enabled: true,
+			},
+			Listeners: []*ConsulIngressListener{{
+				Port:     3000,
+				Protocol: "http",
+				Services: []*ConsulIngressService{{
+					Name:  "service1",
+					Hosts: []string{"10.0.0.1", "10.0.0.1:3000"},
+				}, {
+					Name:  "service2",
+					Hosts: []string{"10.0.0.2", "10.0.0.2:3000"},
+				}},
+			}, {
+				Port:     3001,
+				Protocol: "tcp",
+				Services: []*ConsulIngressService{{
+					Name: "service3",
+				}},
+			}},
+		},
+	}
+)
+
+func TestConsulGateway_Copy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		g := (*ConsulGateway)(nil)
+		result := g.Copy()
+		require.Nil(t, result)
+	})
+
+	t.Run("as ingress", func(t *testing.T) {
+		result := consulIngressGateway1.Copy()
+		require.Equal(t, consulIngressGateway1, result)
+		require.True(t, result.Equals(consulIngressGateway1))
+		require.True(t, consulIngressGateway1.Equals(result))
+	})
+}
+
+func TestConsulGateway_Equals_ingress(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		a := (*ConsulGateway)(nil)
+		b := (*ConsulGateway)(nil)
+		require.True(t, a.Equals(b))
+		require.False(t, a.Equals(consulIngressGateway1))
+		require.False(t, consulIngressGateway1.Equals(a))
+	})
+
+	original := consulIngressGateway1.Copy()
+
+	type gway = ConsulGateway
+	type tweaker = func(g *gway)
+
+	t.Run("reflexive", func(t *testing.T) {
+		require.True(t, original.Equals(original))
+	})
+
+	try := func(t *testing.T, tweak tweaker) {
+		modifiable := original.Copy()
+		tweak(modifiable)
+		require.False(t, original.Equals(modifiable))
+		require.False(t, modifiable.Equals(original))
+		require.True(t, modifiable.Equals(modifiable))
+	}
+
+	// proxy stanza equality checks
+
+	t.Run("mod gateway timeout", func(t *testing.T) {
+		try(t, func(g *gway) { g.Proxy.ConnectTimeout = helper.TimeToPtr(9 * time.Second) })
+	})
+
+	t.Run("mod gateway envoy_gateway_bind_tagged_addresses", func(t *testing.T) {
+		try(t, func(g *gway) { g.Proxy.EnvoyGatewayBindTaggedAddresses = false })
+	})
+
+	t.Run("mod gateway envoy_gateway_bind_addresses", func(t *testing.T) {
+		try(t, func(g *gway) {
+			g.Proxy.EnvoyGatewayBindAddresses = map[string]*ConsulGatewayBindAddress{
+				"listener3": &ConsulGatewayBindAddress{Address: "9.9.9.9", Port: 9999},
+			}
+		})
+	})
+
+	t.Run("mod gateway envoy_gateway_no_default_bind", func(t *testing.T) {
+		try(t, func(g *gway) { g.Proxy.EnvoyGatewayNoDefaultBind = false })
+	})
+
+	t.Run("mod gateway envoy_dns_discovery_type", func(t *testing.T) {
+		try(t, func(g *gway) { g.Proxy.EnvoyDNSDiscoveryType = "LOGICAL_DNS" })
+	})
+
+	t.Run("mod gateway config", func(t *testing.T) {
+		try(t, func(g *gway) {
+			g.Proxy.Config = map[string]interface{}{
+				"foo": 2,
+			}
+		})
+	})
+
+	// ingress config entry equality checks
+
+	t.Run("mod ingress tls", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.TLS = nil })
+		try(t, func(g *gway) { g.Ingress.TLS.Enabled = false })
+	})
+
+	t.Run("mod ingress listeners count", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners = g.Ingress.Listeners[:1] })
+	})
+
+	t.Run("mod ingress listeners port", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Port = 7777 })
+	})
+
+	t.Run("mod ingress listeners protocol", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Protocol = "tcp" })
+	})
+
+	t.Run("mod ingress listeners services count", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Services = g.Ingress.Listeners[0].Services[:1] })
+	})
+
+	t.Run("mod ingress listeners services name", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Name = "serviceX" })
+	})
+
+	t.Run("mod ingress listeners services hosts count", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Hosts = g.Ingress.Listeners[0].Services[0].Hosts[:1] })
+	})
+
+	t.Run("mod ingress listeners services hosts content", func(t *testing.T) {
+		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Hosts[0] = "255.255.255.255" })
+	})
+}
+
+func TestConsulGateway_ingressServicesEqual(t *testing.T) {
+	igs1 := []*ConsulIngressService{{
+		Name:  "service1",
+		Hosts: []string{"host1", "host2"},
+	}, {
+		Name:  "service2",
+		Hosts: []string{"host3"},
+	}}
+
+	reversed := []*ConsulIngressService{
+		igs1[1], igs1[0], // services reversed
+	}
+
+	require.True(t, ingressServicesEqual(igs1, reversed))
+
+	hostOrder := []*ConsulIngressService{{
+		Name:  "service1",
+		Hosts: []string{"host2", "host1"}, // hosts reversed
+	}, {
+		Name:  "service2",
+		Hosts: []string{"host3"},
+	}}
+
+	require.True(t, ingressServicesEqual(igs1, hostOrder))
+}

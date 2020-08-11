@@ -2,7 +2,6 @@ package structs
 
 import (
 	"crypto/sha1"
-	"encoding/json"
 	"fmt"
 	"hash"
 	"io"
@@ -1280,7 +1279,7 @@ func (p *ConsulGatewayProxy) Equals(o *ConsulGatewayProxy) bool {
 		return p == o
 	}
 
-	if p.ConnectTimeout != o.ConnectTimeout {
+	if !helper.CompareTimePtrs(p.ConnectTimeout, o.ConnectTimeout) {
 		return false
 	}
 
@@ -1334,6 +1333,7 @@ func (c *ConsulGatewayTLSConfig) Equals(o *ConsulGatewayTLSConfig) bool {
 type ConsulIngressService struct {
 	// Namespace is not yet supported.
 	// Namespace string
+
 	Name string
 
 	Hosts []string
@@ -1439,12 +1439,6 @@ type ConsulIngressConfigEntry struct {
 
 	TLS       *ConsulGatewayTLSConfig
 	Listeners []*ConsulIngressListener
-}
-
-// todo: cleanup
-func (e *ConsulIngressConfigEntry) String() string {
-	b, _ := json.Marshal(e)
-	return string(b)
 }
 
 func (e *ConsulIngressConfigEntry) Copy() *ConsulIngressConfigEntry {
