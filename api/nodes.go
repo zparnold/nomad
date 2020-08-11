@@ -14,7 +14,7 @@ const (
 	NodeStatusDown  = "down"
 
 	// NodeSchedulingEligible and Ineligible marks the node as eligible or not,
-	// respectively, for receiving allocations. This is orthoginal to the node
+	// respectively, for receiving allocations. This is orthogonal to the node
 	// status being ready.
 	NodeSchedulingEligible   = "eligible"
 	NodeSchedulingIneligible = "ineligible"
@@ -433,6 +433,38 @@ func (n *Nodes) GcAlloc(allocID string, q *QueryOptions) error {
 	path := fmt.Sprintf("/v1/client/allocation/%s/gc", allocID)
 	_, err := n.client.query(path, nil, q)
 	return err
+}
+
+// Purge removes a node from the system. Nodes can still re-join the cluster if
+// they are alive.
+func (n *Nodes) Purge(nodeID string, q *QueryOptions) (*NodePurgeResponse, *QueryMeta, error) {
+	var resp NodePurgeResponse
+	path := fmt.Sprintf("/v1/node/%s/purge", nodeID)
+	qm, err := n.client.putQuery(path, nil, &resp, q)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &resp, qm, nil
+}
+
+// NodePurgeResponse is used to deserialize a Purge response.
+type NodePurgeResponse struct {
+	HeartbeatTTL    time.Duration
+	EvalIDs         []string
+	EvalCreateIndex uint64
+	NodeModifyIndex uint64
+	LeaderRPCAddr   string
+	NumNodes        int32
+	Servers         []*NodeServerInfo
+}
+
+// NodeServerInfo is used within NodePurgeResponse to deserialize a Purge
+// response.
+type NodeServerInfo struct {
+	Datacenter       string
+	RPCAdvertiseAddr string
+	RPCMajorVersion  int32
+	RPCMinorVersion  int32
 }
 
 // DriverInfo is used to deserialize a DriverInfo entry
