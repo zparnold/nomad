@@ -359,6 +359,10 @@ func (p *ConsulGatewayProxy) Canonicalize() {
 		p.EnvoyDNSDiscoveryType = "LOGICAL_DNS"
 	}
 
+	if len(p.EnvoyGatewayBindAddresses) == 0 {
+		p.EnvoyGatewayBindAddresses = nil
+	}
+
 	if len(p.Config) == 0 {
 		p.Config = nil
 	}
