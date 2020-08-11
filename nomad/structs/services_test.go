@@ -639,6 +639,8 @@ func TestConsulGateway_ingressServicesEqual(t *testing.T) {
 		Hosts: []string{"host3"},
 	}}
 
+	require.False(t, ingressServicesEqual(igs1, nil))
+
 	reversed := []*ConsulIngressService{
 		igs1[1], igs1[0], // services reversed
 	}
@@ -654,4 +656,29 @@ func TestConsulGateway_ingressServicesEqual(t *testing.T) {
 	}}
 
 	require.True(t, ingressServicesEqual(igs1, hostOrder))
+}
+
+func TestConsulGateway_ingressListenersEqual(t *testing.T) {
+	ils1 := []*ConsulIngressListener{{
+		Port:     2000,
+		Protocol: "http",
+		Services: []*ConsulIngressService{{
+			Name:  "service1",
+			Hosts: []string{"host1", "host2"},
+		}},
+	}, {
+		Port:     2001,
+		Protocol: "tcp",
+		Services: []*ConsulIngressService{{
+			Name: "service2",
+		}},
+	}}
+
+	require.False(t, ingressListenersEqual(ils1, nil))
+
+	reversed := []*ConsulIngressListener{
+		ils1[1], ils1[0],
+	}
+
+	require.True(t, ingressListenersEqual(ils1, reversed))
 }
