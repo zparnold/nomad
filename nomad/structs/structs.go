@@ -6024,11 +6024,13 @@ func (tg *TaskGroup) LookupTask(name string) *Task {
 
 // UsesConnect for convenience returns true if the TaskGroup contains at least
 // one service that makes use of Consul Connect features.
+//
+// Currently used for validating that the task group contains one or more connect
+// aware services before generating a service identity token.
 func (tg *TaskGroup) UsesConnect() bool {
 	for _, service := range tg.Services {
 		if service.Connect != nil {
-			if service.Connect.IsNative() || service.Connect.HasSidecar() {
-				// todo(shoenig) probably also gateway - check uses.
+			if service.Connect.IsNative() || service.Connect.HasSidecar() || service.Connect.IsGateway() {
 				return true
 			}
 		}
